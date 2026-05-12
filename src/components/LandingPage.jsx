@@ -539,7 +539,7 @@ export default function LandingPage({ onEnter }) {
         </div>
 
         {/* Final Launch Section */}
-        <div className="launch-container info-section right">
+        <div className="launch-container" style={{justifyContent: 'center'}}>
           <button className="btn-premium" onClick={handleLaunch}>
             Enter Dashboard
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

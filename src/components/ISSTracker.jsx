@@ -86,12 +86,41 @@ export default function ISSTracker({ onSpeedUpdate, onDashboardUpdate }) {
   };
 
   const fetchPeople = async () => {
+    // Known fallback crew for when API is unavailable
+    const fallbackCrew = [
+      { name: "Oleg Kononenko", craft: "ISS" },
+      { name: "Nikolai Chub", craft: "ISS" },
+      { name: "Tracy Caldwell Dyson", craft: "ISS" },
+      { name: "Matthew Dominick", craft: "ISS" },
+      { name: "Michael Barratt", craft: "ISS" },
+      { name: "Jeanette Epps", craft: "ISS" },
+      { name: "Alexander Grebenkin", craft: "ISS" },
+    ];
+
     try {
-      const res = await axios.get('/api/astros');
-      const issPeople = res.data.people.filter(p => p.craft === 'ISS');
-      setPeople(issPeople);
+      // Try direct API first (works if CORS is allowed), then CORS proxy
+      const urls = [
+        'http://api.open-notify.org/astros.json',
+        'https://corsproxy.io/?http://api.open-notify.org/astros.json',
+      ];
+
+      let data = null;
+      for (const url of urls) {
+        try {
+          const res = await axios.get(url, { timeout: 5000 });
+          if (res.data?.people) { data = res.data; break; }
+        } catch (_) { /* try next */ }
+      }
+
+      if (data) {
+        const issPeople = data.people.filter(p => p.craft === 'ISS');
+        setPeople(issPeople.length > 0 ? issPeople : fallbackCrew);
+      } else {
+        setPeople(fallbackCrew);
+      }
     } catch (err) {
       console.error(err);
+      setPeople(fallbackCrew);
     }
   };
 

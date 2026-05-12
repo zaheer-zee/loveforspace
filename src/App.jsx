@@ -6,7 +6,6 @@ import ISSTracker from './components/ISSTracker';
 import NewsDashboard from './components/NewsDashboard';
 import Charts from './components/Charts';
 import Chatbot from './components/Chatbot';
-import ThemeToggle from './components/ThemeToggle';
 import LandingPage from './components/LandingPage';
 import Astronauts from './components/Astronauts';
 import Preloader from './components/Preloader';
@@ -16,6 +15,12 @@ function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [speedData, setSpeedData] = useState([]);
   const [newsData, setNewsData] = useState([]);
+
+  // Force dark mode permanently
+  useEffect(() => {
+    document.documentElement.classList.add('dark');
+    localStorage.setItem('theme', 'dark');
+  }, []);
 
   useEffect(() => {
     const lenis = new Lenis({
@@ -94,7 +99,6 @@ function App() {
               </span>
             </div>
           </div>
-          <ThemeToggle />
         </div>
       </header>
 
