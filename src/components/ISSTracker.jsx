@@ -95,6 +95,8 @@ export default function ISSTracker({ onSpeedUpdate, onDashboardUpdate }) {
       { name: "Michael Barratt", craft: "ISS" },
       { name: "Jeanette Epps", craft: "ISS" },
       { name: "Alexander Grebenkin", craft: "ISS" },
+      { name: "Butch Wilmore", craft: "ISS" },
+      { name: "Sunita Williams", craft: "ISS" },
     ];
 
     try {
