@@ -1,24 +1,86 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Search, RefreshCw, ExternalLink } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { ExternalLink } from 'lucide-react';
+import gsap from 'gsap';
+import ScrollTrigger from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
+
+const MagneticImage = ({ src, alt }) => {
+  const imageRef = useRef(null);
+
+  const handleMouseMove = (e) => {
+    if (!imageRef.current) return;
+    const { left, top, width, height } = imageRef.current.getBoundingClientRect();
+    const x = (e.clientX - left - width / 2) / (width / 2);
+    const y = (e.clientY - top - height / 2) / (height / 2);
+
+    gsap.to(imageRef.current, {
+      x: x * 15,
+      y: y * 15,
+      rotationX: -y * 10,
+      rotationY: x * 10,
+      scale: 1.05,
+      duration: 0.6,
+      ease: "power3.out"
+    });
+  };
+
+  const handleMouseLeave = () => {
+    if (!imageRef.current) return;
+    gsap.to(imageRef.current, {
+      x: 0,
+      y: 0,
+      rotationX: 0,
+      rotationY: 0,
+      scale: 1,
+      duration: 0.8,
+      ease: "power3.out"
+    });
+  };
+
+  return (
+    <figure 
+      className="relative perspective-[800px] w-full max-w-[200px] md:max-w-[300px] aspect-[4/3] flex-shrink-0"
+    >
+      <div 
+        ref={imageRef}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        className="w-full h-full rounded-xl overflow-hidden shadow-2xl border border-slate-700/50 cursor-crosshair transform-gpu"
+      >
+        <img 
+          src={src} 
+          alt={alt} 
+          className="w-full h-full object-cover pointer-events-none" 
+          onError={(e) => { e.target.src = 'https://picsum.photos/400/300'; }}
+        />
+      </div>
+    </figure>
+  );
+};
 
 export default function NewsDashboard({ onNewsFetched }) {
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('date'); // date, source
+  const [mousePos, setMousePos] = useState({ x: -1000, y: -1000 });
 
-  const fetchNews = async (forceRefresh = false) => {
+  const handleMouseMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMousePos({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+  };
+
+  const fetchNews = async () => {
     try {
       setLoading(true);
-      
-      // Check localStorage cache (valid for 15 minutes)
       const cached = localStorage.getItem('news_cache');
       const cacheTime = localStorage.getItem('news_cache_time');
       const isCacheValid = cached && cacheTime && (Date.now() - parseInt(cacheTime) < 15 * 60 * 1000);
 
-      if (!forceRefresh && isCacheValid) {
+      if (isCacheValid) {
         const parsedArticles = JSON.parse(cached);
         setArticles(parsedArticles);
         if (onNewsFetched) onNewsFetched(parsedArticles);
@@ -45,14 +107,12 @@ export default function NewsDashboard({ onNewsFetched }) {
           source: { name: article.source_id || 'News' },
           publishedAt: article.pubDate,
           description: article.description,
-          author: article.creator ? article.creator.join(', ') : '',
           url: article.link
-        })).slice(0, 10);
+        })).slice(0, 5);
       } else {
-        fetchedArticles = res.data.articles.slice(0, 10);
+        fetchedArticles = res.data.articles.slice(0, 5);
       }
 
-      // clean up articles with missing data
       fetchedArticles = fetchedArticles.filter(a => a.title && a.title !== '[Removed]');
 
       setArticles(fetchedArticles);
@@ -60,11 +120,8 @@ export default function NewsDashboard({ onNewsFetched }) {
       localStorage.setItem('news_cache_time', Date.now().toString());
       if (onNewsFetched) onNewsFetched(fetchedArticles);
       
-      if (forceRefresh) toast.success('News Refreshed');
     } catch (error) {
       console.error(error);
-      toast.error('Failed to fetch news');
-      // If error, try to load from cache even if expired
       const cached = localStorage.getItem('news_cache');
       if (cached) setArticles(JSON.parse(cached));
     } finally {
@@ -76,122 +133,126 @@ export default function NewsDashboard({ onNewsFetched }) {
     fetchNews();
   }, []);
 
-  const handleRefresh = () => fetchNews(true);
+  useEffect(() => {
+    if (articles.length === 0) return;
 
-  // Filter and Sort
-  let displayedArticles = articles.filter(a => 
-    a.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (a.source.name && a.source.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+    ScrollTrigger.refresh();
 
-  if (sortBy === 'date') {
-    displayedArticles = displayedArticles.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
-  } else if (sortBy === 'source') {
-    displayedArticles = displayedArticles.sort((a, b) => a.source.name.localeCompare(b.source.name));
-  }
+    const textBlocks = document.querySelectorAll('.scroll-reveal-text');
+    textBlocks.forEach((block) => {
+      gsap.fromTo(block, 
+        { color: '#334155' }, 
+        {
+          color: '#e8e4db', 
+          scrollTrigger: {
+            trigger: block,
+            start: "top 85%",
+            end: "bottom 50%",
+            scrub: true,
+          }
+        }
+      );
+    });
 
-  // Show only 5 articles as requested: "Show 5 articles (total 10)"
-  displayedArticles = displayedArticles.slice(0, 5);
+    return () => {
+      ScrollTrigger.getAll().forEach(t => t.kill());
+    };
+  }, [articles]);
+
+  const displayedArticles = articles.slice(0, 5);
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 transition-colors flex flex-col h-full">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-          📰 Latest News
-        </h2>
-        <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <div className="relative flex-grow">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Search news..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-            />
-          </div>
-          <select 
-            value={sortBy} 
-            onChange={(e) => setSortBy(e.target.value)}
-            className="px-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="date">Latest First</option>
-            <option value="source">By Source</option>
-          </select>
-          <button 
-            onClick={handleRefresh}
-            disabled={loading}
-            className="p-2 bg-blue-100 hover:bg-blue-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-blue-600 dark:text-blue-400 rounded-lg transition-colors disabled:opacity-50"
-            title="Refresh News"
-          >
-            <RefreshCw className={loading ? "animate-spin" : ""} size={20} />
-          </button>
-        </div>
+    <div 
+      className="w-full relative min-h-screen py-10 md:py-20 overflow-hidden rounded-3xl border border-slate-800/50"
+      onMouseMove={handleMouseMove}
+    >
+      {/* 3D Animated Fluid Mesh Gradient Background */}
+      <div className="absolute inset-0 z-0 bg-[#030508] pointer-events-none">
+        {/* Organic Flowing Mesh Blobs */}
+        <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vh] bg-[#06b6d4]/10 rounded-full blur-[120px] mix-blend-screen animate-[blob1_15s_infinite_alternate_ease-in-out]"></div>
+        <div className="absolute top-[-10%] right-[-10%] w-[50vw] h-[50vh] bg-[#d4cfc1]/5 rounded-full blur-[120px] mix-blend-screen animate-[blob2_18s_infinite_alternate_ease-in-out]"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-[50vw] h-[50vh] bg-[#0f172a]/80 rounded-full blur-[120px] mix-blend-screen animate-[blob3_16s_infinite_alternate_ease-in-out]"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vh] bg-[#06b6d4]/5 rounded-full blur-[120px] mix-blend-screen animate-[blob4_20s_infinite_alternate_ease-in-out]"></div>
+        
+        {/* Dynamic Cursor Tracking Glow (Soft ambient base aura) */}
+        <div 
+          className="absolute w-[800px] h-[800px] rounded-full blur-[100px] transition-transform duration-[400ms] ease-out will-change-transform z-0 mix-blend-screen"
+          style={{
+            background: 'radial-gradient(circle, rgba(6, 182, 212, 0.15) 0%, rgba(212, 207, 193, 0.05) 40%, transparent 70%)',
+            transform: `translate(${mousePos.x - 400}px, ${mousePos.y - 400}px)`
+          }}
+        />
       </div>
 
-      <div className="flex-grow overflow-y-auto pr-2 space-y-4">
+      {/* The Flashlight Grid / Skeleton Lines */}
+      <div 
+        className="absolute inset-0 z-0 pointer-events-none"
+        style={{
+          // The crisp skeleton line grid pattern
+          backgroundImage: `
+            linear-gradient(to right, rgba(6, 182, 212, 0.2) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(6, 182, 212, 0.2) 1px, transparent 1px)
+          `,
+          backgroundSize: '24px 24px',
+          // The flashlight mask tracking the cursor
+          maskImage: `radial-gradient(500px circle at ${mousePos.x}px ${mousePos.y}px, black 0%, transparent 100%)`,
+          WebkitMaskImage: `radial-gradient(500px circle at ${mousePos.x}px ${mousePos.y}px, black 0%, transparent 100%)`,
+        }}
+      />
+
+      <div className="relative z-10 text-center mb-32">
+         <h2 className="text-3xl font-bold text-[#d4cfc1] font-mono tracking-[0.2em] uppercase">
+           Global Transmissions
+         </h2>
+         <p className="text-slate-500 font-mono mt-4">Scroll to decrypt daily updates.</p>
+      </div>
+
+      <div className="flex flex-col gap-32 relative z-10 max-w-6xl mx-auto">
         {loading && articles.length === 0 ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="animate-pulse flex flex-col sm:flex-row gap-4 border border-slate-100 dark:border-slate-700 p-4 rounded-lg">
-                <div className="w-full sm:w-32 h-24 bg-slate-200 dark:bg-slate-700 rounded-md"></div>
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
-                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : displayedArticles.length > 0 ? (
+          <div className="animate-pulse text-slate-700 font-mono text-3xl text-center">Decrypting network nodes...</div>
+        ) : (
           displayedArticles.map((article, idx) => (
-            <div key={idx} className="group border border-slate-100 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-500 p-4 rounded-lg flex flex-col sm:flex-row gap-4 transition-all hover:shadow-md bg-white dark:bg-slate-800/50">
-              {article.urlToImage && (
-                <div className="w-full sm:w-40 h-32 flex-shrink-0 rounded-md overflow-hidden bg-slate-100 dark:bg-slate-700">
-                  <img 
-                    src={article.urlToImage} 
-                    alt={article.title} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    onError={(e) => { e.target.style.display = 'none'; }}
-                  />
-                </div>
-              )}
-              <div className="flex flex-col flex-grow">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">
+            <div 
+              key={idx} 
+              className={`flex flex-col ${idx % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'} items-center gap-10 md:gap-20 group`}
+            >
+              {/* Magnetic Small Image */}
+              <MagneticImage 
+                src={article.urlToImage || `https://picsum.photos/400/300?random=${idx}`} 
+                alt={article.title} 
+              />
+
+              {/* Scrolling Text Reveal */}
+              <div 
+                className="flex flex-col cursor-pointer"
+                onClick={() => window.open(article.url, '_blank')}
+              >
+                <div className="flex items-center gap-4 mb-6">
+                  <span className="text-[10px] font-mono text-[#d4cfc1] tracking-[0.2em] uppercase border border-[#d4cfc1]/30 px-3 py-1 rounded-full">
                     {article.source.name}
                   </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <span className="text-[10px] font-mono text-slate-600 tracking-widest">
                     {new Date(article.publishedAt).toLocaleDateString()}
                   </span>
                 </div>
-                <h3 className="font-bold text-slate-800 dark:text-white line-clamp-2 mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                
+                <h3 className="scroll-reveal-text text-3xl md:text-5xl lg:text-6xl font-bold font-mono transition-colors duration-1000 leading-[1.1] tracking-tight">
                   {article.title}
                 </h3>
-                <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2 mb-3">
-                  {article.description || 'No description available for this article.'}
-                </p>
-                <div className="mt-auto flex justify-between items-center">
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {article.author ? `By ${article.author}` : ''}
-                  </span>
-                  <a 
-                    href={article.url} 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    Read More <ExternalLink size={14} />
-                  </a>
+                
+                <div className="mt-8 h-0 opacity-0 overflow-hidden group-hover:h-auto group-hover:opacity-100 transition-all duration-500 ease-out">
+                  <p className="text-lg md:text-xl text-slate-400 font-mono max-w-2xl border-l-2 border-[#d4cfc1]/50 pl-6 leading-relaxed">
+                    {article.description || 'No further decryption available.'}
+                  </p>
+                  <div className="mt-6 flex items-center gap-2 text-[#d4cfc1] font-mono text-sm uppercase tracking-widest hover:text-white transition-colors">
+                    Access Report <ExternalLink size={14} />
+                  </div>
                 </div>
               </div>
             </div>
           ))
-        ) : (
-          <div className="text-center py-10 text-slate-500 dark:text-slate-400">
-            No articles found. Try adjusting your search.
-          </div>
         )}
       </div>
     </div>
-  );
+  )
 }
